@@ -39,6 +39,27 @@ static inline int sysfs_init(void)
 /* spinlock for vfsmount related operations, inplace of dcache_lock */
  __cacheline_aligned_in_smp DEFINE_SPINLOCK(vfsmount_lock);
 
+ //Yuanguo:
+ //                            ......
+ //                            +------+
+ //                            | next |
+ //                            | prev |
+ //                          4 +------+
+ //                            | next |
+ //                            | prev |     +-------------------+     +-------------------+
+ //                          3 +------+     | struct vfsmount   |     | struct vfsmount   |
+ //                            | next | ----+-> mnt_hash -------+-----+-> mnt_hash -------+----> ...
+ //                            | prev |     |   mnt_parent      |     |   mnt_parent      |
+ //                          2 +------+     |   mnt_mountpoint  |     |   mnt_mountpoint  |
+ //                            | next |     |   ......          |     |   ......          |
+ //                            | prev |     +-------------------+     +-------------------+
+ //                          1 +------+    the vfsmount list:  hash(mnt_parent, mnt_mountpoint) = 2
+ //                            | next |
+ //                            | prev |
+ //      mount_hashtable --> 0 +------+
+ //
+ // When lookup the struct vfsmount instance that is mounted on mnt-of-parent-fs, dentry-in-parent-fs,
+ // hash(mnt-of-parent-fs, dentry-in-parent-fs), and then lookup in that vfsmount list. see lookup_mnt()
 static struct list_head *mount_hashtable;
 static int hash_mask, hash_bits;
 static kmem_cache_t *mnt_cache; 
@@ -126,7 +147,7 @@ static void attach_mnt(struct vfsmount *mnt, struct nameidata *nd)
 {
 	mnt->mnt_parent = mntget(nd->mnt);
 	mnt->mnt_mountpoint = dget(nd->dentry);
-	list_add(&mnt->mnt_hash, mount_hashtable+hash(nd->mnt, nd->dentry));
+	list_add(&mnt->mnt_hash, mount_hashtable+hash(nd->mnt, nd->dentry)); //Yuanguo: see mount_hashtable;
 	list_add_tail(&mnt->mnt_child, &nd->mnt->mnt_mounts);
 	nd->dentry->d_mounted++;
 }
@@ -601,9 +622,15 @@ static int graft_tree(struct vfsmount *mnt, struct nameidata *nd)
 	if (IS_ROOT(nd->dentry) || !d_unhashed(nd->dentry)) {
 		struct list_head head;
 
+    //Yuanguo: set its mnt-of-parent-fs(mnt_parent) and dentry-in-parent-fs(mnt_mountpoint);
+    //         put into global hash table mount_hashtable;
+    //         make it a child of its parent;
 		attach_mnt(mnt, nd);
+    
+    //Yuanguo: link to namepsace;
 		list_add_tail(&head, &mnt->mnt_list);
 		list_splice(&head, current->namespace->list.prev);
+
 		mntget(mnt);
 		err = 0;
 	}
@@ -793,7 +820,7 @@ int do_add_mount(struct vfsmount *newmnt, struct nameidata *nd,
 	while(d_mountpoint(nd->dentry) && follow_down(&nd->mnt, &nd->dentry))
 		;
 	err = -EINVAL;
-	if (!check_mnt(nd->mnt))
+	if (!check_mnt(nd->mnt)) //Yuanguo: while we slept, namespace changed.
 		goto unlock;
 
 	/* Refuse the same filesystem on the same mount point */
@@ -807,6 +834,11 @@ int do_add_mount(struct vfsmount *newmnt, struct nameidata *nd,
 		goto unlock;
 
 	newmnt->mnt_flags = mnt_flags;
+
+  //Yuanguo: set its mnt-of-parent-fs(mnt_parent) and dentry-in-parent-fs(mnt_mountpoint);
+  //         put into global hash table mount_hashtable;
+  //         make it a child of its parent;
+  //         link to namepsace;
 	err = graft_tree(newmnt, nd);
 
 	if (err == 0 && fslist) {

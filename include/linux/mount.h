@@ -23,17 +23,17 @@
 struct vfsmount
 {
 	struct list_head mnt_hash;
-	struct vfsmount *mnt_parent;	/* fs we are mounted on */
-	struct dentry *mnt_mountpoint;	/* dentry of mountpoint */
+	struct vfsmount *mnt_parent;	/* fs we are mounted on */            //Yuanguo: mnt-of-parent-fs
+	struct dentry *mnt_mountpoint;	/* dentry of mountpoint */          //Yuanguo: dentry-in-parent-fs
 	struct dentry *mnt_root;	/* root of the mounted tree */
 	struct super_block *mnt_sb;	/* pointer to superblock */
-	struct list_head mnt_mounts;	/* list of children, anchored here */
-	struct list_head mnt_child;	/* and going through their mnt_child */
+	struct list_head mnt_mounts;	/* list of children, anchored here */ //Yuanguo: head of my children;
+	struct list_head mnt_child;	/* and going through their mnt_child */ //Yuanguo: link to my siblings;
 	atomic_t mnt_count;
 	int mnt_flags;
 	int mnt_expiry_mark;		/* true if marked for expiry */
 	char *mnt_devname;		/* Name of device e.g. /dev/dsk/hda1 */
-	struct list_head mnt_list;
+	struct list_head mnt_list; //Yuanguo: link to other vfsmount objs belonging to the same namespace;
 	struct list_head mnt_fslink;	/* link in fs-specific expiry list */
 	struct namespace *mnt_namespace; /* containing namespace */
 };

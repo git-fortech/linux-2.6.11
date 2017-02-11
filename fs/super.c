@@ -687,6 +687,12 @@ struct super_block *get_sb_bdev(struct file_system_type *fs_type,
 	 * while we are mounting
 	 */
 	down(&bdev->bd_mount_sem);
+
+  //Yuanguo: sget find or create a superblock.  
+  //  1. find: for each superblock in fs_type->fs_supers, compare its 
+  //           's_bdev' with 'bdev', if match, found (see function test_bdev_super); 
+  //  2. create: alloc a super_block instance, set its 's_bdev' to 'bdev' (see 
+  //           function set_bdev_super); then link the new superblock in fs_type->fs_supers.
 	s = sget(fs_type, test_bdev_super, set_bdev_super, bdev);
 	up(&bdev->bd_mount_sem);
 	if (IS_ERR(s))
@@ -706,6 +712,16 @@ struct super_block *get_sb_bdev(struct file_system_type *fs_type,
 		strlcpy(s->s_id, bdevname(bdev, b), sizeof(s->s_id));
 		s->s_old_blocksize = block_size(bdev);
 		sb_set_blocksize(s, s->s_old_blocksize);
+
+    //Yuanguo: for ext2, fill_super is ext2_fill_super;
+    //         for ext3, fill_super is ext3_fill_super;
+    //         reads the disk superblock from the ext2/ext3 disk partition and
+    //         init some fileds of s with info from disk superblock. 
+    //         notice 1. s->s_bdev is bdev, from which disk partition is known;
+    //                2. disk superblock is not exactly the same as the 
+    //                   struct super_block. No surprise: disk superblocks of different
+    //                   filesystem types are different, but the struct super_block
+    //                   is the same. 
 		error = fill_super(s, data, flags & MS_VERBOSE ? 1 : 0);
 		if (error) {
 			up_write(&s->s_umount);
@@ -796,6 +812,11 @@ EXPORT_SYMBOL(get_sb_single);
 struct vfsmount *
 do_kern_mount(const char *fstype, int flags, const char *name, void *data)
 {
+  //Yuanguo: parameter name
+  //         1. the pathname of the block device storing the filesystem, e.g. /dev/dsk/hda1;
+  //         or 
+  //         2. the filesystem type name for special filesystems
+
 	struct file_system_type *type = get_fs_type(fstype);
 	struct super_block *sb = ERR_PTR(-ENOMEM);
 	struct vfsmount *mnt;
@@ -805,6 +826,8 @@ do_kern_mount(const char *fstype, int flags, const char *name, void *data)
 	if (!type)
 		return ERR_PTR(-ENODEV);
 
+  //Yuanguo: allocate an instance of "struct vfsmount" and 
+  //         set its mnt_devname to name
 	mnt = alloc_vfsmnt(name);
 	if (!mnt)
 		goto out;
@@ -823,6 +846,9 @@ do_kern_mount(const char *fstype, int flags, const char *name, void *data)
 		}
 	}
 
+  //Yuanguo: get superblock and bdev (bdev is saved in sb->s_bdev)
+  //   for ext2, get sb is ext2_get_sb;
+  //   for ext3, get_sb is ext3_get_sb;
 	sb = type->get_sb(type, flags, name, data);
 	if (IS_ERR(sb))
 		goto out_free_secdata;
@@ -831,8 +857,13 @@ do_kern_mount(const char *fstype, int flags, const char *name, void *data)
  		goto out_sb;
 	mnt->mnt_sb = sb;
 	mnt->mnt_root = dget(sb->s_root);
+
+  //Yuanguo: the following 2 fields are pre-initialized here, they will
+  //         be initialized with the right value later: see
+  //         do_add_mount --> graft_tree --> attach_mnt
 	mnt->mnt_mountpoint = sb->s_root;
 	mnt->mnt_parent = mnt;
+
 	mnt->mnt_namespace = current->namespace;
 	up_write(&sb->s_umount);
 	put_filesystem(type);
