@@ -615,6 +615,12 @@ int set_anon_super(struct super_block *s, void *data)
 		spin_unlock(&unnamed_dev_lock);
 		return -EMFILE;
 	}
+  //Yuanguo: Special filesystems are not bound to physical block devices. However, the kernel assigns 
+  //  to each mounted special filesystem a fictitious block device that has the value 0 as major number 
+  //  and an arbitrary value (different for each special filesystem) as a minor number. The set_anon_super() 
+  //  function is used to initialize superblocks of special filesystems; this function essentially gets an 
+  //  unused minor number dev and sets the s_dev field of the new superblock with major number 0 and minor 
+  //  number dev. 
 	s->s_dev = MKDEV(0, dev & MINORMASK);
 	return 0;
 }
@@ -766,6 +772,7 @@ struct super_block *get_sb_nodev(struct file_system_type *fs_type,
 
 	s->s_flags = flags;
 
+  //Yuanguo: for rootfs, fill_super is ramfs_fill_super;
 	error = fill_super(s, data, flags & MS_VERBOSE ? 1 : 0);
 	if (error) {
 		up_write(&s->s_umount);
@@ -815,7 +822,7 @@ do_kern_mount(const char *fstype, int flags, const char *name, void *data)
   //Yuanguo: parameter name
   //         1. the pathname of the block device storing the filesystem, e.g. /dev/dsk/hda1;
   //         or 
-  //         2. the filesystem type name for special filesystems
+  //         2. the filesystem type name for special filesystems, e.g. rootfs
 
 	struct file_system_type *type = get_fs_type(fstype);
 	struct super_block *sb = ERR_PTR(-ENOMEM);
@@ -849,6 +856,7 @@ do_kern_mount(const char *fstype, int flags, const char *name, void *data)
   //Yuanguo: get superblock and bdev (bdev is saved in sb->s_bdev)
   //   for ext2, get sb is ext2_get_sb;
   //   for ext3, get_sb is ext3_get_sb;
+  //   for rootfs, get_sub is rootfs_get_sb;
 	sb = type->get_sb(type, flags, name, data);
 	if (IS_ERR(sb))
 		goto out_free_secdata;
@@ -859,8 +867,9 @@ do_kern_mount(const char *fstype, int flags, const char *name, void *data)
 	mnt->mnt_root = dget(sb->s_root);
 
   //Yuanguo: the following 2 fields are pre-initialized here, they will
-  //         be initialized with the right value later: see
+  //         be overwritten with the right value later: see
   //         do_add_mount --> graft_tree --> attach_mnt
+  //         However, for rootfs, the they will not be overwritten.
 	mnt->mnt_mountpoint = sb->s_root;
 	mnt->mnt_parent = mnt;
 
