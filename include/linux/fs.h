@@ -427,7 +427,7 @@ struct inode {
 	struct hlist_node	i_hash;
 	struct list_head	i_list;
 	struct list_head	i_sb_list;
-	struct list_head	i_dentry;
+	struct list_head	i_dentry; //Yuanguo: head of the list of dentries referencing this inode (head of hard links of this inode)
 	unsigned long		i_ino;
 	atomic_t		i_count;
 	umode_t			i_mode;

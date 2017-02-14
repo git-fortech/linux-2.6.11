@@ -993,7 +993,7 @@ exact_copy_from_user(void *to, const void __user *from, unsigned long n)
 int copy_mount_options(const void __user *data, unsigned long *where)
 {
 	int i;
-	unsigned long page;
+	unsigned long page;  //unsigned long is a pointer here; param 'where' is a pointer of pointer;
 	unsigned long size;
 	
 	*where = 0;
@@ -1181,6 +1181,12 @@ asmlinkage long sys_mount(char __user * dev_name, char __user * dir_name,
 			  char __user * type, unsigned long flags,
 			  void __user * data)
 {
+  //Yuanguo: mount -t ext3 /dev/sdb1 /mnt/dir -o noatime
+  //   dev_name :  "/dev/sdb1"
+  //   dir_name :  "/mnt/dir"
+  //   type     :  "ext3"
+  //   flags    :  noatime
+
 	int retval;
 	unsigned long data_page;
 	unsigned long type_page;

@@ -864,7 +864,12 @@ do_kern_mount(const char *fstype, int flags, const char *name, void *data)
  	if (error)
  		goto out_sb;
 	mnt->mnt_sb = sb;
-	mnt->mnt_root = dget(sb->s_root);
+
+  //Yuanguo: sb->s_root is named "/" and references the inode corresponding to 
+  //         filesystem's root inode (e.g. EXT3_ROOT_INO for ext3). see
+  //               ramfs_fill_super --> d_alloc_root for rootfs;
+  //               ext3_fill_super  --> d_alloc_root for an ordinary ext3;
+	mnt->mnt_root = dget(sb->s_root);  
 
   //Yuanguo: the following 2 fields are pre-initialized here, they will
   //         be overwritten with the right value later: see

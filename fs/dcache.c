@@ -796,7 +796,7 @@ void d_instantiate(struct dentry *entry, struct inode * inode)
 	if (!list_empty(&entry->d_alias)) BUG();
 	spin_lock(&dcache_lock);
 	if (inode)
-		list_add(&entry->d_alias, &inode->i_dentry);
+		list_add(&entry->d_alias, &inode->i_dentry); //Yuanguo: let dentry reference to inode (dentry becomes a hard link of inode)
 	entry->d_inode = inode;
 	spin_unlock(&dcache_lock);
 	security_d_instantiate(entry, inode);
@@ -870,6 +870,8 @@ struct dentry * d_alloc_root(struct inode * root_inode)
 		if (res) {
 			res->d_sb = root_inode->i_sb;
 			res->d_parent = res;
+
+      //Yuanguo: let dentry reference to root_inode (dentry becomes a hard link of inode)
 			d_instantiate(res, root_inode);
 		}
 	}
