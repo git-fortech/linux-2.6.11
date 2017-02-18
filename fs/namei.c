@@ -554,6 +554,9 @@ int follow_up(struct vfsmount **mnt, struct dentry **dentry)
 /* no need for dcache_lock, as serialization is taken care in
  * namespace.c
  */
+//Yuanguo: filesystem-A may be mounted on [mnt, dentry], filesystem-B may be mounted
+//         on [mnt-of-filesystem-A, root-dentry-of-filesystem-A], filesystem-C may be
+//         mounted on [mnt-of-filesystem-B, root-dentry-of-filesystem-B] ...
 static int follow_mount(struct vfsmount **mnt, struct dentry **dentry)
 {
 	int res = 0;
@@ -727,7 +730,7 @@ int fastcall link_path_walk(const char * name, struct nameidata *nd)
 			goto last_component;
 		while (*++name == '/');
 		if (!*name)
-			goto last_with_slashes;
+			goto last_with_slashes;  //Yuanguo: the last component is treated separately. this is the normal code-path that for-loop exits;
 
 		/*
 		 * "." and ".." are special - ".." especially so because it has
@@ -760,7 +763,12 @@ int fastcall link_path_walk(const char * name, struct nameidata *nd)
 		err = do_lookup(nd, &this, &next);
 		if (err)
 			break;
-		/* Check mountpoints.. */
+		/* Check mountpoints.. */  
+    //Yuanguo: we've found [next.mnt, next.dentry], but filesystem-A may be 
+    //         mounted on [next.mnt, next.dentry], filesystem-B may be mounted
+    //         on [mnt-of-filesystem-A, root-dentry-of-filesystem-A], filesystem-C
+    //         may be mounted on [mnt-of-filesystem-B, root-dentry-of-filesystem-B].
+    //         In this case, we should continue to walk from root-dentry of filesystem-C.
 		follow_mount(&next.mnt, &next.dentry);
 
 		err = -ENOENT;
@@ -771,7 +779,7 @@ int fastcall link_path_walk(const char * name, struct nameidata *nd)
 		if (!inode->i_op)
 			goto out_dput;
 
-		if (inode->i_op->follow_link) {
+		if (inode->i_op->follow_link) {  //Yuanguo: this is to check whether the component is a symlink; only symlink has follow_link() func?
 			mntget(next.mnt);
 			err = do_follow_link(next.dentry, nd);
 			dput(next.dentry);
@@ -791,12 +799,16 @@ int fastcall link_path_walk(const char * name, struct nameidata *nd)
 			nd->dentry = next.dentry;
 		}
 		err = -ENOTDIR; 
-		if (!inode->i_op->lookup)
+		if (!inode->i_op->lookup) //Yuanguo: this is to check whether the component is a dir; only dir has lookup() func?
 			break;
 		continue;
 		/* here ends the main loop */
 
-last_with_slashes:
+last_with_slashes: 
+    //Yuanguo: if there's '/' following the last component, add these 2 flags;
+    //         LOOKUP_FOLLOW: if the last component is a symbolic link, interpret (follow) it. Why is it 
+    //                 set only when there's '/' following the last component?
+    //         LOOKUP_DIRECTORY : we're looking up a dir;
 		lookup_flags |= LOOKUP_FOLLOW | LOOKUP_DIRECTORY;
 last_component:
 		nd->flags &= ~LOOKUP_CONTINUE;
@@ -825,7 +837,7 @@ last_component:
 		follow_mount(&next.mnt, &next.dentry);
 		inode = next.dentry->d_inode;
 		if ((lookup_flags & LOOKUP_FOLLOW)
-		    && inode && inode->i_op && inode->i_op->follow_link) {
+		    && inode && inode->i_op && inode->i_op->follow_link) {  //Yuanguo: and the last component is a symlink; only symlink has follow_link()?
 			mntget(next.mnt);
 			err = do_follow_link(next.dentry, nd);
 			dput(next.dentry);
@@ -841,9 +853,9 @@ last_component:
 		err = -ENOENT;
 		if (!inode)
 			break;
-		if (lookup_flags & LOOKUP_DIRECTORY) {
+		if (lookup_flags & LOOKUP_DIRECTORY) {  //Yuanguo: we're looking for a dir, 
 			err = -ENOTDIR; 
-			if (!inode->i_op || !inode->i_op->lookup)
+			if (!inode->i_op || !inode->i_op->lookup)  //Yuanguo: so check if the last component is really a dir. only dir has lookup()?
 				break;
 		}
 		goto return_base;

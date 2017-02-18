@@ -59,7 +59,31 @@ static kmem_cache_t *dentry_cache;
 
 static unsigned int d_hash_mask;
 static unsigned int d_hash_shift;
+
+// Yuanguo:
+//                                                     +==========================+       +==========================+
+//                                                     |      struct dentry       |       |      struct dentry       |
+//                                                     +--------------------------+       +--------------------------+
+//                                ......               |struct dentry *d_parent   |       |struct dentry *d_parent   |
+//                         5 +-------------------+     |......                    |       |......                    |
+//                           | struct hlist_head |     |struct qstr d_name        |       |struct qstr d_name        |
+//                         4 +-------------------+     |......                    |       |......                    |
+//                           | struct hlist_head | --> |struct hlist_node d_hash -+-----> |struct hlist_node d_hash -+--> ...
+//                         3 +-------------------+     |......                    |       |......                    |
+//                           | struct hlist_head |     +==========================+       +==========================+
+//                         2 +-------------------+          list of dentries that hash_func(d_parent, d_name.hash) = 3
+//                           | struct hlist_head |
+//                         1 +-------------------+
+//                           | struct hlist_head |
+// dentry_hashtable ---->  0 +-------------------+
+//
+// Given dentry 'parent', we lookup a sub dentry named 'name', then we can:
+//    1. calculate the hash:  hash = hash_func(parent, name.hash);
+//    2. dentry_hashtable + (hash & D_HASHMASK); see function d_hash();
+//    3. search in the list returned in step 2; see function __d_lookup();
+
 static struct hlist_head *dentry_hashtable;
+
 static LIST_HEAD(dentry_unused);
 
 /* Statistics gathering. */
@@ -1070,6 +1094,8 @@ struct dentry * __d_lookup(struct dentry * parent, struct qstr * name)
 		if (dentry->d_parent != parent)
 			goto next;
 
+    // Yuanguo: checking the hash of the name-string is not enough. name comparison 
+    // is needed.
 		/*
 		 * It is safe to compare names since d_move() cannot
 		 * change the qstr (protected by d_lock).
